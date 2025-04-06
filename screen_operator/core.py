@@ -169,7 +169,7 @@ class ScreenOperator:
                 coordinates[1], 
                 duration=self.move_duration
             )
-            time.sleep(0.01)
+            time.sleep(0.05)
             pyautogui.click()
             time.sleep(0.01)
             pyautogui.click()

@@ -1,7 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox
 import json
-import sys
 
 class ConfigEditor:
     def __init__(self, master, config_path=None, title_name="配置编辑"):
@@ -106,7 +105,7 @@ class ConfigEditor:
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(self.config_data, f, indent=4, ensure_ascii=False)
             self.master.withdraw()
-            messagebox.showinfo("成功", "配置保存成功\n请重新启动程序")
+            messagebox.showinfo("成功", "配置保存成功\n即将重启程序")
             
         except Exception as e:
             self.master.withdraw()
@@ -118,6 +117,8 @@ class ConfigEditor:
         """安全关闭窗口的方法"""
         self.master.destroy()
         self.master.quit()  # 确保终止主循环
+        from CheckRestart import restart_script
+        restart_script()
 
 def main(parent=None, config_path=None):
     """改进后的入口函数"""

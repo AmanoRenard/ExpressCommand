@@ -124,7 +124,7 @@ def get_app_version(app_name: str, timeout=4) -> dict:
     try:
         # URL 编码处理特殊字符
         safe_name = quote(app_name.strip())
-        url = f"{BASE_URL}/get_version?name={safe_name}"
+        url = f"{BASE_URL}/{safe_name}"
         
         response = requests.get(url, timeout=timeout, proxies={"http": None, "https": None})
         response.raise_for_status()  # 自动处理 4xx/5xx 错误
@@ -140,7 +140,8 @@ def get_app_version(app_name: str, timeout=4) -> dict:
             
         return {
             "success": True,
-            "version": data["version"]
+            "version": data["version"],
+            "msg": data["msg"]
         }
         
     except Exception as e:
@@ -155,7 +156,7 @@ def get_app_version(app_name: str, timeout=4) -> dict:
     #     }
 
 
-# -1：使用过新版  0：正常  1：检测到新版本
+# -1：使用过新版  1：检测到新版本   2：访问不了检查更新页面   字符串：正常
 def check_and_update_files(target_version) -> int:
     # 检查目录是否存在，不存在则创建
     if not os.path.exists(log_data_dir):
@@ -163,6 +164,7 @@ def check_and_update_files(target_version) -> int:
     
     # 检查是否需要更新文件
     need_update = False
+    msg = ""
     
     # 检查autoversion.txt是否存在或内容是否正确
     if not os.path.exists(autoversion_path):
@@ -186,10 +188,7 @@ def check_and_update_files(target_version) -> int:
                     return 2
             except Exception:
                 return 2
-
-
-            except:
-                pass
+            msg = data["msg"].strip()
             if content != target_version:
                 need_update = True
     
@@ -210,5 +209,5 @@ def check_and_update_files(target_version) -> int:
         print("文件已更新")
     else:
         print("文件已是最新版本，无需更新")
-    return 0
+    return msg
 

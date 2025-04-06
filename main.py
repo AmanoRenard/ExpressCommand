@@ -26,7 +26,7 @@ from ListAllWindows import update_group_names
 
 from pathlib import Path
 
-VERSION = "20250404"
+VERSION = "20250407"
 
 SRC_PATH = Path.absolute(Path(__file__)).parent # 获取临时目录路径对象
 SOFT_PATH = Path.cwd()
@@ -179,11 +179,11 @@ def check_image():
     res = cv2.matchTemplate(screenshot_gray, target, cv2.TM_CCOEFF_NORMED)
     return np.any(res >= THRESHOLD)
 
-def simulate_paste(auto_send_enabled, tracking_number):
-    if tracking_number.startswith("7"): 
+def simulate_paste(auto_send_enabled, command):
+    if command.startswith("7") or command.startswith("申"): 
         if not check_image():
             return
-    time.sleep(0.1)
+    time.sleep(0.2)
     # 模拟按下 Ctrl 键
     win32api.keybd_event(win32con.VK_CONTROL, 0, 0, 0)
     # 模拟按下 V 键
@@ -192,7 +192,9 @@ def simulate_paste(auto_send_enabled, tracking_number):
     win32api.keybd_event(ord('V'), 0, win32con.KEYEVENTF_KEYUP, 0)
     # 释放 Ctrl 键
     win32api.keybd_event(win32con.VK_CONTROL, 0, win32con.KEYEVENTF_KEYUP, 0)
-    time.sleep(0.2)
+    if "*" in command:
+        return
+    time.sleep(0.1)
 
     # 自动发送功能：添加回车键
     if auto_send_enabled:
@@ -324,16 +326,35 @@ class ExpressCommandGenerator:
 
         if not check_single_instance():
             messagebox.showwarning("警告", "程序已在后台运行！")
+            self.splash_root.destroy()
             sys.exit(0)
+
         if check_update == -1:
             messagebox.showwarning("警告", "您安装过最新版，请勿使用旧版！")
+            self.splash_root.destroy()
             sys.exit(0)
         elif check_update == 1:
-            messagebox.showwarning("提示", "检测到新版本，请及时更新！")
+            messagebox.showwarning("提示", "检测到新版本，点击确认更新！")
+            from CheckRestart import write_and_run_update_script
+            self.splash_root.destroy()
+            write_and_run_update_script()
             sys.exit(0)
         elif check_update == 2:
             messagebox.showwarning("提示", "连接服务器失败，请检查网络！")
+            self.splash_root.destroy()
             sys.exit(0)
+        elif isinstance(check_update, str):
+            msg_path = Path(r"C:\Program Files\LogData\ExpressCommandMsg.txt")
+            msg = None
+            if not msg_path.exists():
+                msg = check_update
+            else:
+                if check_update != msg_path.read_text(encoding='utf-8').strip():
+                    msg = check_update
+
+            if msg:
+                msg_path.write_text(msg, encoding='utf-8')
+                self.show_info(msg)
         self.current_action = None
         self.root = tk.Tk()
         self.root.withdraw()  # 隐藏主窗口
@@ -384,17 +405,8 @@ class ExpressCommandGenerator:
             self.show_error(f"配置文件错误：{str(e)}")
             self.auto_send_enabled = False
 
-    # def update_autosend_config(self, enabled):
-    #     try:
-    #         config.update_selection("auto_send", enabled)
-    #     except Exception as e:
-    #         self.show_error(f"保存配置失败：{str(e)}")
-
-
     def show_main_menu(self):
         self.listening = False
-        # 如果已有菜单窗口则先关闭
-        # if self.menu_window and self.menu_window.winfo_exists():
         if self.menu_window:
             self.menu_window.destroy()
         self.menu_window = tk.Toplevel(self.root)
@@ -527,6 +539,7 @@ class ExpressCommandGenerator:
         # self.cleanup()
 
     def handle_normal_command(self):
+        pyperclip.copy("")
         tracking_number = self.wait_for_clipboard("请复制快递单号")
         if not tracking_number:
             return
@@ -572,26 +585,38 @@ class ExpressCommandGenerator:
                 hwnd = find_window(config)
                 if hwnd:
                     activate_window(hwnd)
-                    simulate_paste(self.auto_send_enabled, tracking_number)  # 修改调用方式
+                    simulate_paste(self.auto_send_enabled, command)  # 修改调用方式
         except Exception as e:
             self.show_error(f"生成指令失败：{str(e)}")
 
     def handle_modify_command(self):
+        pyperclip.copy("")
         try:
             tracking_number = self.wait_for_clipboard("请复制快递单号")
             if not tracking_number:
                 return
-                
-            old_info = self.wait_for_clipboard("请复制联系方式及地址")
-            if not old_info:
-                return
-                
+            jt = self.is_jt(tracking_number)
+            old_info = None
+            if jt:
+                if self.get_action_text() == "修改联系方式":
+                    self.show_error("极兔请选择修改地址！")
+                    return
+            else:
+                old_info = self.wait_for_clipboard("请复制联系方式及地址")
+                if not old_info:
+                    return
             new_content = self.get_new_content_input()
             if new_content:
-                if IS_BEATUY:
-                    command = f"{tracking_number}\n{old_info}\n    {self.get_action_text()}\n{new_content}"
+                if jt:
+                    if IS_BEATUY:
+                        command = f"{tracking_number}\n    {self.get_action_text()}\n{new_content}"
+                    else:
+                        command = f"{tracking_number} {self.get_action_text()} {new_content}"
                 else:
-                    command = f"{tracking_number} {old_info} {self.get_action_text()} {new_content}"
+                    if IS_BEATUY:
+                        command = f"{tracking_number}\n{old_info}\n    {self.get_action_text()}\n{new_content}"
+                    else:
+                        command = f"{tracking_number} {old_info} {self.get_action_text()} {new_content}"
                 pyperclip.copy(command)
                 config = 0
                 if tracking_number.startswith("YT") or tracking_number.startswith("圆通"):
@@ -604,9 +629,9 @@ class ExpressCommandGenerator:
                     config = WINDOW_CONFIG[4]
                 if config:
                     hwnd = find_window(config)
-                    if hwnd: 
+                    if hwnd:
                         activate_window(hwnd)
-                        simulate_paste(self.auto_send_enabled, tracking_number)  # 修改调用方式
+                        simulate_paste(self.auto_send_enabled, command)  # 修改调用方式
         except Exception as e:
             self.show_error(f"处理修改请求失败: {str(e)}")
 
